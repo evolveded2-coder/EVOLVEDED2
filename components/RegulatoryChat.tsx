@@ -1,5 +1,6 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, AlertCircle, BookOpen } from 'lucide-react';
+import { Send, Bot, User, BookOpen, WifiOff } from 'lucide-react';
 import { consultRegulatoryChat } from '../services/geminiService';
 import { ChatMessage } from '../types';
 import ReactMarkdown from 'react-markdown';
@@ -8,12 +9,13 @@ const RegulatoryChat: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'model',
-      text: '**Modo Funcionario Activado.**\n\nSoy su asistente jurídico-técnico para la validación de proyectos bajo el Decreto 555 de 2021. Puedo ayudarle a verificar índices, usos del suelo permitidos por UPZ/UPL o requisitos documentales específicos.',
+      text: '**Asistente Normativo Bogotá (POT 555/2021) Conectado.**\n\n¿En qué artículo o requisito técnico puedo asistirle hoy?',
       timestamp: new Date()
     }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -31,45 +33,56 @@ const RegulatoryChat: React.FC = () => {
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);
+    setHasError(false);
 
     try {
       const responseText = await consultRegulatoryChat(userMsg.text);
+      if (responseText.includes("ERROR DE CONFIGURACIÓN") || responseText.includes("REDEPLOY")) {
+          setHasError(true);
+      }
       const botMsg: ChatMessage = { role: 'model', text: responseText, timestamp: new Date() };
       setMessages(prev => [...prev, botMsg]);
     } catch (error) {
-      setMessages(prev => [...prev, { role: 'model', text: 'Error consultando normativa.', timestamp: new Date() }]);
+      setHasError(true);
+      setMessages(prev => [...prev, { role: 'model', text: '⚠️ Error crítico de conexión. Verifique la API_KEY.', timestamp: new Date() }]);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col h-[700px] border border-slate-300">
-      <div className="bg-brand-dark p-4 text-white flex justify-between items-center">
+    <div className="bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col h-[700px] border border-slate-200">
+      <div className="bg-slate-900 p-5 text-white flex justify-between items-center border-b border-slate-700">
         <div className="flex items-center space-x-3">
-            <BookOpen className="h-6 w-6 text-gov-blue" />
+            <div className="bg-gov-blue p-2 rounded-lg">
+                <BookOpen className="h-5 w-5 text-white" />
+            </div>
             <div>
-            <h2 className="font-semibold text-sm uppercase tracking-wider">Mesa de Ayuda Normativa</h2>
-            <p className="text-xs text-slate-400">Uso Exclusivo Funcionarios Curaduría</p>
+                <h2 className="font-bold text-sm uppercase tracking-widest">Asistente Normativo</h2>
+                <p className="text-[10px] text-slate-400 font-medium">BOGOTÁ D.C. - DECRETO 555 DE 2021</p>
             </div>
         </div>
-        <span className="bg-blue-900 text-xs px-2 py-1 rounded border border-blue-700">v2.1 POT 555</span>
+        <div className="flex items-center space-x-2">
+            <div className={`h-2 w-2 rounded-full ${hasError ? 'bg-red-500' : 'bg-emerald-500 animate-pulse'}`}></div>
+            <span className="text-[9px] font-black uppercase tracking-tighter opacity-70">
+                {hasError ? 'Offline' : 'Online'}
+            </span>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-100">
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50">
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] rounded-lg p-3 ${
+            <div className={`max-w-[90%] rounded-2xl p-4 shadow-sm ${
               msg.role === 'user' 
-                ? 'bg-white border border-slate-200 text-slate-800 shadow-sm' 
-                : 'bg-brand-dark text-slate-200 shadow-md'
+                ? 'bg-gov-blue text-white' 
+                : 'bg-white border border-slate-200 text-slate-800'
             }`}>
-              <div className="flex items-center space-x-2 mb-2 opacity-60 text-xs border-b border-opacity-20 pb-1 border-gray-500">
+              <div className={`flex items-center space-x-2 mb-2 text-[10px] font-black uppercase tracking-widest opacity-50 ${msg.role === 'user' ? 'text-white' : 'text-slate-400'}`}>
                 {msg.role === 'user' ? <User size={12} /> : <Bot size={12} />}
-                <span className="uppercase font-bold">{msg.role === 'user' ? 'Revisor' : 'Sistema IA'}</span>
-                <span>{msg.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                <span>{msg.role === 'user' ? 'Revisor' : 'IA Curaduría'}</span>
               </div>
-              <div className="prose prose-sm max-w-none dark:prose-invert">
+              <div className="prose prose-sm max-w-none prose-slate">
                 <ReactMarkdown>{msg.text}</ReactMarkdown>
               </div>
             </div>
@@ -77,34 +90,40 @@ const RegulatoryChat: React.FC = () => {
         ))}
         {isLoading && (
           <div className="flex justify-start">
-            <div className="bg-brand-dark p-3 rounded-lg shadow-md flex items-center space-x-2">
-              <div className="w-1.5 h-1.5 bg-gov-blue rounded-full animate-bounce"></div>
-              <div className="w-1.5 h-1.5 bg-gov-blue rounded-full animate-bounce delay-75"></div>
-              <div className="w-1.5 h-1.5 bg-gov-blue rounded-full animate-bounce delay-150"></div>
+            <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm flex items-center space-x-3">
+              <div className="flex space-x-1">
+                <div className="w-1.5 h-1.5 bg-gov-blue rounded-full animate-bounce"></div>
+                <div className="w-1.5 h-1.5 bg-gov-blue rounded-full animate-bounce delay-150"></div>
+                <div className="w-1.5 h-1.5 bg-gov-blue rounded-full animate-bounce delay-300"></div>
+              </div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Consultando POT...</span>
             </div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 bg-white border-t border-slate-200">
-        <div className="relative">
+      <div className="p-4 bg-white border-t border-slate-100">
+        <div className="relative group">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Consulte un artículo o requisito (ej: Artículo 45 aislamiento posterior)..."
-            className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-4 pr-12 py-3 focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent text-sm"
+            placeholder="Ej: ¿Cuál es el aislamiento posterior para servicios locales?"
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-5 pr-14 py-4 focus:outline-none focus:ring-4 focus:ring-gov-blue/10 focus:border-gov-blue text-sm transition-all"
           />
           <button
             onClick={handleSend}
             disabled={isLoading || !input.trim()}
-            className="absolute right-2 top-2 bg-brand-dark text-white p-1.5 rounded-md hover:bg-slate-700 disabled:opacity-50 transition-colors"
+            className="absolute right-3 top-2.5 bg-slate-900 text-white p-2.5 rounded-xl hover:bg-slate-800 disabled:opacity-30 transition-all shadow-lg active:scale-95"
           >
             <Send className="h-4 w-4" />
           </button>
         </div>
+        <p className="text-[9px] text-center text-slate-400 mt-3 font-medium uppercase tracking-tighter">
+            Esta IA utiliza procesamiento de lenguaje natural especializado en el POT de Bogotá.
+        </p>
       </div>
     </div>
   );

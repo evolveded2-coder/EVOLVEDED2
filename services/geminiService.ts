@@ -4,13 +4,13 @@ import { SYSTEM_INSTRUCTION_POT_REVIEWER, DOCUMENT_SPECIFIC_RULES } from '../con
 
 /**
  * Función centralizada para obtener la instancia de la IA.
- * Valida la existencia de la llave en cada llamada para máxima resiliencia en entornos serverless.
+ * Valida la existencia de la llave en cada llamada.
  */
 const getAIInstance = () => {
   const apiKey = process.env.API_KEY;
   
-  if (!apiKey || apiKey === "undefined" || apiKey === "") {
-    throw new Error("MISSING_KEY");
+  if (!apiKey || apiKey === "undefined" || apiKey === "" || apiKey === "null") {
+    throw new Error("API_KEY_NOT_FOUND");
   }
   
   return new GoogleGenAI({ apiKey });
@@ -32,11 +32,11 @@ export const consultRegulatoryChat = async (message: string, history: string[] =
   } catch (error: any) {
     console.error("Error en consultRegulatoryChat:", error);
     
-    if (error.message === "MISSING_KEY" || error.message?.includes("API Key")) {
-      return "⚠️ **ERROR DE CONFIGURACIÓN**: El navegador no detecta tu `API_KEY`.\n\n**Para arreglarlo:**\n1. Ve a los ajustes de tu proyecto en Vercel.\n2. Asegúrate de que la variable se llame `API_KEY`.\n3. **Haz un REDEPLOY** (Pestaña Deployments > Redeploy).";
+    if (error.message === "API_KEY_NOT_FOUND" || error.message?.includes("API Key")) {
+      return "⚠️ **CONFIGURACIÓN PENDIENTE**: Tu configuración en Vercel es correcta, pero el sitio aún no ha sido actualizado.\n\n**PASO FINAL:**\n1. Ve a la pestaña **'Deployments'** en tu panel de Vercel.\n2. En el despliegue más reciente, haz clic en `...` y selecciona **'Redeploy'**.\n\nEsto 'quemará' la llave en el código y activará el sistema.";
     }
     
-    return "Fallo en la conexión con el motor de IA. Intente de nuevo en unos segundos.";
+    return "El motor de IA está ocupado. Por favor, intenta de nuevo en un momento.";
   }
 };
 
@@ -61,7 +61,7 @@ export const analyzeProjectFeasibility = async (description: string, licenseType
     return response.text || "Error en análisis.";
   } catch (error) {
     console.error("Error en análisis de viabilidad:", error);
-    return "Error en el análisis técnico. Verifique su conexión y configuración de API.";
+    return "Error técnico en el motor de análisis.";
   }
 };
 
@@ -85,46 +85,25 @@ export const validateDocumentContent = async (file: File, docId: string): Promis
     const rules = DOCUMENT_SPECIFIC_RULES[docId];
     
     let systemRole = "Revisor Técnico de Curaduría Urbana";
-    let specificInstructions = `
-      Analiza el documento adjunto. 
-      Realiza OCR y extracción de datos clave según la normativa colombiana.
-      Verifica consistencia general.
-    `;
+    let specificInstructions = "Analiza el documento adjunto según normativa.";
     let properties: any = {
         observacion_tecnica: { type: Type.STRING, description: "Dictamen técnico breve" }
     };
 
     if (rules) {
         systemRole = rules.role;
-        specificInstructions = `
-          ERES UN ${rules.role.toUpperCase()} EVALUANDO UN PROYECTO EN BOGOTÁ.
-          Tu objetivo es validar técnicamente el documento adjunto verificando EXPRESAMENTE los siguientes componentes normativos:
-          ${rules.focusItems.map(item => `- ${item}`).join('\n')}
-
-          Debes extraer los valores encontrados para estas variables.
-        `;
-        
+        specificInstructions = `Valida técnicamente: ${rules.focusItems.join(', ')}`;
         rules.expectedKeys.forEach(key => {
-            properties[key] = { type: Type.STRING, description: `Valor extraído para ${key}` };
+            properties[key] = { type: Type.STRING };
         });
     }
-
-    const promptText = `
-      ${specificInstructions}
-      Responde EXCLUSIVAMENTE con un objeto JSON.
-    `;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
         parts: [
-          { 
-            inlineData: { 
-              mimeType: file.type.includes('pdf') ? 'application/pdf' : file.type, 
-              data: base64Data 
-            } 
-          },
-          { text: promptText }
+          { inlineData: { mimeType: file.type.includes('pdf') ? 'application/pdf' : file.type, data: base64Data } },
+          { text: specificInstructions + " Responde en JSON." }
         ]
       },
       config: {
@@ -133,34 +112,21 @@ export const validateDocumentContent = async (file: File, docId: string): Promis
         responseSchema: {
             type: Type.OBJECT,
             properties: {
-                extractedData: {
-                    type: Type.OBJECT,
-                    properties: properties,
-                    description: "Datos técnicos específicos extraídos del documento"
-                },
-                isConsistent: { type: Type.BOOLEAN, description: "True si el documento cumple requisitos mínimos" },
-                confidenceScore: { type: Type.NUMBER }
+                extractedData: { type: Type.OBJECT, properties: properties },
+                isConsistent: { type: Type.BOOLEAN }
             },
             required: ["extractedData", "isConsistent"]
         }
       }
     });
 
-    const text = response.text;
-    if (!text) throw new Error("Respuesta vacía de la IA");
-    
-    return JSON.parse(text);
-
+    return JSON.parse(response.text);
   } catch (error: any) {
-    console.error("Fallo en validación Real IA:", error);
-    const isKeyError = error.message === "MISSING_KEY" || error.message?.includes("API Key");
-    
+    console.error("Error validando documento:", error);
     return { 
       isConsistent: false, 
       extractedData: { 
-        observacion_tecnica: isKeyError
-          ? "ERROR CRÍTICO: La llave de la IA no está configurada correctamente en el servidor."
-          : "No se pudo procesar el documento. Intente de nuevo con una imagen más clara."
+        observacion_tecnica: "Error de configuración de API. Se requiere Redeploy en Vercel." 
       } 
     };
   }
