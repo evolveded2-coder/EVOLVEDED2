@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
   <head>
@@ -6,6 +7,9 @@
     <title>Curaduría Digital Bogotá</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
+      // Shim para process.env para evitar ReferenceError en el navegador
+      window.process = { env: { API_KEY: "" } };
+      
       tailwind.config = {
         theme: {
           extend: {
@@ -37,5 +41,7 @@
 </head>
   <body class="bg-slate-50 text-slate-900 font-sans antialiased">
     <div id="root"></div>
+    <!-- Punto de entrada para la aplicación React -->
+    <script type="module" src="index.tsx"></script>
   </body>
 </html>

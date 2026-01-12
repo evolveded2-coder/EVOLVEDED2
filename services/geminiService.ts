@@ -1,9 +1,9 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { SYSTEM_INSTRUCTION_POT_REVIEWER, DOCUMENT_SPECIFIC_RULES } from '../constants';
+import { SYSTEM_INSTRUCTION_POT_REVIEWER, DOCUMENT_SPECIFIC_RULES } from '../constants.ts';
 
 // Inicialización estricta según lineamientos de seguridad
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
 
 export const consultRegulatoryChat = async (message: string, history: string[] = []): Promise<string> => {
   try {
@@ -47,7 +47,6 @@ export const analyzeProjectFeasibility = async (description: string, licenseType
   }
 };
 
-// Helper para convertir archivos a Base64 para el consumo de la API
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -61,15 +60,9 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-/**
- * VALIDACIÓN REAL: Lee el contenido del archivo y lo envía a Gemini 3
- * Utiliza reglas técnicas específicas por tipo de documento (Jurídico, Arq, Est).
- */
 export const validateDocumentContent = async (file: File, docId: string): Promise<any> => {
   try {
     const base64Data = await fileToBase64(file);
-    
-    // Buscar reglas específicas para este documento en constants.ts
     const rules = DOCUMENT_SPECIFIC_RULES[docId];
     
     let systemRole = "Revisor Técnico de Curaduría Urbana";
@@ -92,7 +85,6 @@ export const validateDocumentContent = async (file: File, docId: string): Promis
           Debes extraer los valores encontrados para estas variables.
         `;
         
-        // Construir schema dinámico basado en las llaves esperadas
         rules.expectedKeys.forEach(key => {
             properties[key] = { type: Type.STRING, description: `Valor extraído para ${key}` };
         });

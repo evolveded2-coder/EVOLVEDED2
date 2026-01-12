@@ -1,11 +1,11 @@
 
 import React from 'react';
 import { HashRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import Navbar from './components/Navbar';
-import LicenseWizard from './components/LicenseWizard';
-import RegulatoryChat from './components/RegulatoryChat';
-import ReviewerDashboard from './components/ReviewerDashboard';
-import FeePayment from './components/FeePayment'; // Nuevo import
+import Navbar from './components/Navbar.tsx';
+import LicenseWizard from './components/LicenseWizard.tsx';
+import RegulatoryChat from './components/RegulatoryChat.tsx';
+import ReviewerDashboard from './components/ReviewerDashboard.tsx';
+import FeePayment from './components/FeePayment.tsx';
 import { ArrowRight, CheckCircle, Clock, FileCheck } from 'lucide-react';
 
 const HomePage: React.FC = () => (
