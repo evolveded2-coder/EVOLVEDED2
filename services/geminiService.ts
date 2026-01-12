@@ -3,7 +3,7 @@ import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { SYSTEM_INSTRUCTION_POT_REVIEWER, DOCUMENT_SPECIFIC_RULES } from '../constants';
 
 const apiKey = process.env.API_KEY || '';
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+const ai = apiKey ? new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
 
 export const consultRegulatoryChat = async (message: string, history: string[] = []): Promise<string> => {
   if (!ai) return "Error: API Key no configurada.";
