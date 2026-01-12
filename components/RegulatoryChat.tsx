@@ -1,15 +1,19 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, BookOpen, WifiOff } from 'lucide-react';
-import { consultRegulatoryChat } from '../services/geminiService';
+import { Send, Bot, User, BookOpen, ExternalLink, Globe } from 'lucide-react';
+import { consultRegulatoryChat, ChatResponse } from '../services/geminiService';
 import { ChatMessage } from '../types';
 import ReactMarkdown from 'react-markdown';
 
+interface EnhancedMessage extends ChatMessage {
+  sources?: { title: string; uri: string }[];
+}
+
 const RegulatoryChat: React.FC = () => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
+  const [messages, setMessages] = useState<EnhancedMessage[]>([
     {
       role: 'model',
-      text: '**Asistente Normativo Bogotá (POT 555/2021) Conectado.**\n\n¿En qué artículo o requisito técnico puedo asistirle hoy?',
+      text: '**Asistente Normativo Bogotá (POT 555/2021) Conectado.**\n\nTengo acceso a la normativa vigente y búsqueda en tiempo real de decretos distritales. ¿Cómo puedo ayudarle?',
       timestamp: new Date()
     }
   ]);
@@ -29,22 +33,27 @@ const RegulatoryChat: React.FC = () => {
   const handleSend = async () => {
     if (!input.trim()) return;
 
-    const userMsg: ChatMessage = { role: 'user', text: input, timestamp: new Date() };
+    const userMsg: EnhancedMessage = { role: 'user', text: input, timestamp: new Date() };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);
     setHasError(false);
 
     try {
-      const responseText = await consultRegulatoryChat(userMsg.text);
-      if (responseText.includes("ERROR DE CONFIGURACIÓN") || responseText.includes("REDEPLOY")) {
-          setHasError(true);
+      const response: ChatResponse = await consultRegulatoryChat(userMsg.text);
+      if (response.text.includes("CONFIGURACIÓN PENDIENTE")) {
+        setHasError(true);
       }
-      const botMsg: ChatMessage = { role: 'model', text: responseText, timestamp: new Date() };
+      const botMsg: EnhancedMessage = { 
+        role: 'model', 
+        text: response.text, 
+        timestamp: new Date(),
+        sources: response.sources 
+      };
       setMessages(prev => [...prev, botMsg]);
     } catch (error) {
       setHasError(true);
-      setMessages(prev => [...prev, { role: 'model', text: '⚠️ Error crítico de conexión. Verifique la API_KEY.', timestamp: new Date() }]);
+      setMessages(prev => [...prev, { role: 'model', text: '⚠️ Error de conexión con el motor normativo.', timestamp: new Date() }]);
     } finally {
       setIsLoading(false);
     }
@@ -58,8 +67,8 @@ const RegulatoryChat: React.FC = () => {
                 <BookOpen className="h-5 w-5 text-white" />
             </div>
             <div>
-                <h2 className="font-bold text-sm uppercase tracking-widest">Asistente Normativo</h2>
-                <p className="text-[10px] text-slate-400 font-medium">BOGOTÁ D.C. - DECRETO 555 DE 2021</p>
+                <h2 className="font-bold text-sm uppercase tracking-widest">Asistente Normativo Bogotá</h2>
+                <p className="text-[10px] text-slate-400 font-medium tracking-tighter uppercase">Inteligencia Urbanística V.3</p>
             </div>
         </div>
         <div className="flex items-center space-x-2">
@@ -80,11 +89,33 @@ const RegulatoryChat: React.FC = () => {
             }`}>
               <div className={`flex items-center space-x-2 mb-2 text-[10px] font-black uppercase tracking-widest opacity-50 ${msg.role === 'user' ? 'text-white' : 'text-slate-400'}`}>
                 {msg.role === 'user' ? <User size={12} /> : <Bot size={12} />}
-                <span>{msg.role === 'user' ? 'Revisor' : 'IA Curaduría'}</span>
+                <span>{msg.role === 'user' ? 'Consultante' : 'IA Curaduría'}</span>
               </div>
               <div className="prose prose-sm max-w-none prose-slate">
                 <ReactMarkdown>{msg.text}</ReactMarkdown>
               </div>
+
+              {msg.sources && msg.sources.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-slate-100">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center mb-2">
+                    <Globe size={12} className="mr-1.5" /> Fuentes de Verificación:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {msg.sources.map((src, sIdx) => (
+                      <a 
+                        key={sIdx} 
+                        href={src.uri} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center bg-slate-50 border border-slate-200 px-2 py-1 rounded-md text-[9px] font-bold text-gov-blue hover:bg-gov-blue/5 transition-colors"
+                      >
+                        <span className="truncate max-w-[150px]">{src.title}</span>
+                        <ExternalLink size={10} className="ml-1" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -96,7 +127,7 @@ const RegulatoryChat: React.FC = () => {
                 <div className="w-1.5 h-1.5 bg-gov-blue rounded-full animate-bounce delay-150"></div>
                 <div className="w-1.5 h-1.5 bg-gov-blue rounded-full animate-bounce delay-300"></div>
               </div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Consultando POT...</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Analizando Normativa...</span>
             </div>
           </div>
         )}
@@ -104,13 +135,13 @@ const RegulatoryChat: React.FC = () => {
       </div>
 
       <div className="p-4 bg-white border-t border-slate-100">
-        <div className="relative group">
+        <div className="relative">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Ej: ¿Cuál es el aislamiento posterior para servicios locales?"
+            placeholder="Ej: ¿Qué dice el POT sobre aislamientos en barrios de consolidación?"
             className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-5 pr-14 py-4 focus:outline-none focus:ring-4 focus:ring-gov-blue/10 focus:border-gov-blue text-sm transition-all"
           />
           <button
@@ -122,7 +153,7 @@ const RegulatoryChat: React.FC = () => {
           </button>
         </div>
         <p className="text-[9px] text-center text-slate-400 mt-3 font-medium uppercase tracking-tighter">
-            Esta IA utiliza procesamiento de lenguaje natural especializado en el POT de Bogotá.
+            ESTE ASISTENTE NO REEMPLAZA EL CONCEPTO JURÍDICO OFICIAL DE LA CURADURÍA.
         </p>
       </div>
     </div>

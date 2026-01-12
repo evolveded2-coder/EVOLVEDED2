@@ -3,65 +3,113 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { SYSTEM_INSTRUCTION_POT_REVIEWER, DOCUMENT_SPECIFIC_RULES } from '../constants.ts';
 
 /**
- * Función centralizada para obtener la instancia de la IA.
- * Valida la existencia de la llave en cada llamada.
+ * Centralized AI instance getter.
  */
 const getAIInstance = () => {
   const apiKey = process.env.API_KEY;
-  
   if (!apiKey || apiKey === "undefined" || apiKey === "" || apiKey === "null") {
     throw new Error("API_KEY_NOT_FOUND");
   }
-  
   return new GoogleGenAI({ apiKey });
 };
 
-export const consultRegulatoryChat = async (message: string, history: string[] = []): Promise<string> => {
+export interface ChatResponse {
+  text: string;
+  sources?: { title: string; uri: string }[];
+}
+
+export const consultRegulatoryChat = async (message: string): Promise<ChatResponse> => {
   try {
     const ai = getAIInstance();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: message,
       config: {
-        systemInstruction: SYSTEM_INSTRUCTION_POT_REVIEWER,
-        temperature: 0.1,
+        systemInstruction: SYSTEM_INSTRUCTION_POT_REVIEWER + "\n\nIMPORTANTE: Si mencionas normas recientes de Bogotá, usa Google Search para verificar si hay decretos modificatorios posteriores al 555 de 2021.",
+        temperature: 0.2,
+        tools: [{ googleSearch: {} }]
       }
     });
     
-    return response.text || "No se pudo generar una respuesta.";
+    const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
+      ?.filter(chunk => chunk.web)
+      .map(chunk => ({
+        title: chunk.web?.title || "Fuente externa",
+        uri: chunk.web?.uri || ""
+      })) || [];
+
+    return {
+      text: response.text || "No se pudo generar una respuesta.",
+      sources: sources.length > 0 ? sources : undefined
+    };
   } catch (error: any) {
     console.error("Error en consultRegulatoryChat:", error);
-    
-    if (error.message === "API_KEY_NOT_FOUND" || error.message?.includes("API Key")) {
-      return "⚠️ **CONFIGURACIÓN PENDIENTE**: Tu configuración en Vercel es correcta, pero el sitio aún no ha sido actualizado.\n\n**PASO FINAL:**\n1. Ve a la pestaña **'Deployments'** en tu panel de Vercel.\n2. En el despliegue más reciente, haz clic en `...` y selecciona **'Redeploy'**.\n\nEsto 'quemará' la llave en el código y activará el sistema.";
+    if (error.message === "API_KEY_NOT_FOUND") {
+      return { text: "⚠️ **CONFIGURACIÓN PENDIENTE**: La API_KEY no está configurada o requiere Redeploy en Vercel." };
     }
-    
-    return "El motor de IA está ocupado. Por favor, intenta de nuevo en un momento.";
+    return { text: "El motor de IA está ocupado. Intente de nuevo." };
   }
 };
 
-export const analyzeProjectFeasibility = async (description: string, licenseType: string): Promise<string> => {
+export const crossValidateProject = async (projectData: any, extractedDocs: any[]): Promise<any> => {
   try {
     const ai = getAIInstance();
     const prompt = `
-      Analiza viabilidad preliminar (Bogotá POT 555/2021):
-      Licencia: ${licenseType}
-      Proyecto: ${description}
+      ACTÚA COMO CURADOR URBANO DE BOGOTÁ. 
+      Realiza un cruce técnico exhaustivo de la siguiente información:
       
-      Salida Markdown:
-      - **Modalidad**: Correcta/Incorrecta
-      - **Alertas Normativas**: Altura, Usos, Aislamientos.
-      - **Riesgo**: Bajo/Medio/Alto
+      DATOS DEL PROYECTO:
+      - Nombre: ${projectData.nombre}
+      - Dirección: ${projectData.direccion}
+      - Tipo: ${projectData.tipoLicencia}
+      - Modalidad: ${projectData.modalidad}
+      
+      HALLAZGOS DE DOCUMENTOS:
+      ${extractedDocs.map(d => `[${d.nombre}]: ${JSON.stringify(d.datosExtraidos)}`).join('\n')}
+      
+      TAREA:
+      1. Verifica consistencia de nombres entre Cédula, Tradición y Formulario.
+      2. Verifica si el tipo de licencia es coherente con los documentos (ej. si es Construcción, debe haber planos).
+      3. Identifica riesgos normativos inmediatos bajo el POT 555 de 2021 (Bogotá).
+      4. Genera un dictamen de viabilidad técnica.
+      
+      RESPONDE ÚNICAMENTE EN JSON.
     `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            aprobado: { type: Type.BOOLEAN },
+            puntajeCumplimiento: { type: Type.NUMBER },
+            analisisHolistico: { type: Type.STRING },
+            detalles: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  norma: { type: Type.STRING },
+                  valorProyecto: { type: Type.STRING },
+                  valorNorma: { type: Type.STRING },
+                  cumple: { type: Type.BOOLEAN },
+                  observacion: { type: Type.STRING }
+                }
+              }
+            }
+          },
+          required: ["aprobado", "detalles", "analisisHolistico"]
+        }
+      }
     });
-    return response.text || "Error en análisis.";
+
+    return JSON.parse(response.text);
   } catch (error) {
-    console.error("Error en análisis de viabilidad:", error);
-    return "Error técnico en el motor de análisis.";
+    console.error("Error en crossValidateProject:", error);
+    return null;
   }
 };
 
@@ -69,12 +117,8 @@ const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64Data = result.split(',')[1];
-      resolve(base64Data);
-    };
-    reader.onerror = (error) => reject(error);
+    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+    reader.onerror = reject;
   });
 };
 
@@ -84,18 +128,12 @@ export const validateDocumentContent = async (file: File, docId: string): Promis
     const base64Data = await fileToBase64(file);
     const rules = DOCUMENT_SPECIFIC_RULES[docId];
     
-    let systemRole = "Revisor Técnico de Curaduría Urbana";
-    let specificInstructions = "Analiza el documento adjunto según normativa.";
     let properties: any = {
-        observacion_tecnica: { type: Type.STRING, description: "Dictamen técnico breve" }
+      observacion_tecnica: { type: Type.STRING, description: "Dictamen técnico breve sobre el documento" }
     };
 
     if (rules) {
-        systemRole = rules.role;
-        specificInstructions = `Valida técnicamente: ${rules.focusItems.join(', ')}`;
-        rules.expectedKeys.forEach(key => {
-            properties[key] = { type: Type.STRING };
-        });
+      rules.expectedKeys.forEach(key => { properties[key] = { type: Type.STRING }; });
     }
 
     const response = await ai.models.generateContent({
@@ -103,31 +141,25 @@ export const validateDocumentContent = async (file: File, docId: string): Promis
       contents: {
         parts: [
           { inlineData: { mimeType: file.type.includes('pdf') ? 'application/pdf' : file.type, data: base64Data } },
-          { text: specificInstructions + " Responde en JSON." }
+          { text: `Analiza este documento para una Curaduría en Bogotá. Reglas: ${rules?.focusItems.join(', ') || 'General'}. Responde en JSON.` }
         ]
       },
       config: {
-        systemInstruction: systemRole,
+        systemInstruction: rules?.role || "Revisor de Curaduría",
         responseMimeType: "application/json",
         responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-                extractedData: { type: Type.OBJECT, properties: properties },
-                isConsistent: { type: Type.BOOLEAN }
-            },
-            required: ["extractedData", "isConsistent"]
+          type: Type.OBJECT,
+          properties: {
+            extractedData: { type: Type.OBJECT, properties: properties },
+            isConsistent: { type: Type.BOOLEAN }
+          },
+          required: ["extractedData", "isConsistent"]
         }
       }
     });
 
     return JSON.parse(response.text);
-  } catch (error: any) {
-    console.error("Error validando documento:", error);
-    return { 
-      isConsistent: false, 
-      extractedData: { 
-        observacion_tecnica: "Error de configuración de API. Se requiere Redeploy en Vercel." 
-      } 
-    };
+  } catch (error) {
+    return { isConsistent: false, extractedData: { observacion_tecnica: "Error en validación AI." } };
   }
 };
