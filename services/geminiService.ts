@@ -2,9 +2,23 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { SYSTEM_INSTRUCTION_POT_REVIEWER, DOCUMENT_SPECIFIC_RULES } from '../constants.ts';
 
+/**
+ * Función centralizada para obtener la instancia de la IA.
+ * Valida la existencia de la llave en cada llamada para máxima resiliencia en entornos serverless.
+ */
+const getAIInstance = () => {
+  const apiKey = process.env.API_KEY;
+  
+  if (!apiKey || apiKey === "undefined" || apiKey === "") {
+    throw new Error("MISSING_KEY");
+  }
+  
+  return new GoogleGenAI({ apiKey });
+};
+
 export const consultRegulatoryChat = async (message: string, history: string[] = []): Promise<string> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = getAIInstance();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: message,
@@ -15,29 +29,31 @@ export const consultRegulatoryChat = async (message: string, history: string[] =
     });
     
     return response.text || "No se pudo generar una respuesta.";
-  } catch (error) {
-    console.error("Error consultando Gemini:", error);
-    if (error instanceof Error && error.message.includes("key")) {
-        return "⚠️ **Error de Configuración**: La llave de IA (API_KEY) no ha sido detectada por el navegador. \n\n**Acciones requeridas:**\n1. Verifique que la variable `API_KEY` esté en los ajustes de Vercel.\n2. **IMPORTANTE**: Realice un 'Redeploy' desde el panel de Vercel para aplicar los cambios.";
+  } catch (error: any) {
+    console.error("Error en consultRegulatoryChat:", error);
+    
+    if (error.message === "MISSING_KEY" || error.message?.includes("API Key")) {
+      return "⚠️ **ERROR DE CONFIGURACIÓN**: El navegador no detecta tu `API_KEY`.\n\n**Para arreglarlo:**\n1. Ve a los ajustes de tu proyecto en Vercel.\n2. Asegúrate de que la variable se llame `API_KEY`.\n3. **Haz un REDEPLOY** (Pestaña Deployments > Redeploy).";
     }
-    return "Fallo en la conexión con el motor de IA.";
+    
+    return "Fallo en la conexión con el motor de IA. Intente de nuevo en unos segundos.";
   }
 };
 
 export const analyzeProjectFeasibility = async (description: string, licenseType: string): Promise<string> => {
-  const prompt = `
-    Analiza viabilidad preliminar (Bogotá POT 555/2021):
-    Licencia: ${licenseType}
-    Proyecto: ${description}
-    
-    Salida Markdown:
-    - **Modalidad**: Correcta/Incorrecta
-    - **Alertas Normativas**: Altura, Usos, Aislamientos.
-    - **Riesgo**: Bajo/Medio/Alto
-  `;
-
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = getAIInstance();
+    const prompt = `
+      Analiza viabilidad preliminar (Bogotá POT 555/2021):
+      Licencia: ${licenseType}
+      Proyecto: ${description}
+      
+      Salida Markdown:
+      - **Modalidad**: Correcta/Incorrecta
+      - **Alertas Normativas**: Altura, Usos, Aislamientos.
+      - **Riesgo**: Bajo/Medio/Alto
+    `;
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
@@ -45,7 +61,7 @@ export const analyzeProjectFeasibility = async (description: string, licenseType
     return response.text || "Error en análisis.";
   } catch (error) {
     console.error("Error en análisis de viabilidad:", error);
-    return "Error en el análisis de viabilidad técnica.";
+    return "Error en el análisis técnico. Verifique su conexión y configuración de API.";
   }
 };
 
@@ -64,7 +80,7 @@ const fileToBase64 = (file: File): Promise<string> => {
 
 export const validateDocumentContent = async (file: File, docId: string): Promise<any> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = getAIInstance();
     const base64Data = await fileToBase64(file);
     const rules = DOCUMENT_SPECIFIC_RULES[docId];
     
@@ -135,14 +151,16 @@ export const validateDocumentContent = async (file: File, docId: string): Promis
     
     return JSON.parse(text);
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Fallo en validación Real IA:", error);
+    const isKeyError = error.message === "MISSING_KEY" || error.message?.includes("API Key");
+    
     return { 
       isConsistent: false, 
       extractedData: { 
-        observacion_tecnica: error instanceof Error && error.message.includes("key")
-          ? "ERROR CRÍTICO: Llave de API no detectada en el entorno de ejecución."
-          : "No se pudo procesar el documento. Intente de nuevo o verifique el formato."
+        observacion_tecnica: isKeyError
+          ? "ERROR CRÍTICO: La llave de la IA no está configurada correctamente en el servidor."
+          : "No se pudo procesar el documento. Intente de nuevo con una imagen más clara."
       } 
     };
   }
