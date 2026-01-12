@@ -7,8 +7,10 @@
     <title>Curaduría Digital Bogotá</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      // Shim para process.env para evitar ReferenceError en el navegador
-      window.process = { env: { API_KEY: "" } };
+      // Shim inteligente: solo define si no existe y no sobreescribe valores existentes
+      window.process = window.process || {};
+      window.process.env = window.process.env || {};
+      // No asignamos "" a API_KEY aquí para permitir que el entorno la inyecte
       
       tailwind.config = {
         theme: {

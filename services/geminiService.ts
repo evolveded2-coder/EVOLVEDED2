@@ -2,24 +2,34 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { SYSTEM_INSTRUCTION_POT_REVIEWER, DOCUMENT_SPECIFIC_RULES } from '../constants.ts';
 
-// Inicialización estricta según lineamientos de seguridad
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
+/**
+ * Función auxiliar para obtener el cliente de IA de forma segura.
+ * Garantiza que process.env.API_KEY sea leído en el momento del uso.
+ */
+const getAIClient = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("API_KEY no configurada. Por favor, añádala en las variables de entorno de Vercel.");
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 export const consultRegulatoryChat = async (message: string, history: string[] = []): Promise<string> => {
   try {
+    const ai = getAIClient();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: message,
       config: {
         systemInstruction: SYSTEM_INSTRUCTION_POT_REVIEWER,
-        temperature: 0.1, // Menor temperatura para mayor precisión técnica
+        temperature: 0.1,
       }
     });
     
     return response.text || "No se pudo generar una respuesta.";
   } catch (error) {
     console.error("Error consultando Gemini:", error);
-    return "Ocurrió un error al consultar el asistente normativo. Por favor, verifique la configuración de la API.";
+    return "Error: " + (error instanceof Error ? error.message : "Fallo en la conexión con el servidor de IA.");
   }
 };
 
@@ -36,6 +46,7 @@ export const analyzeProjectFeasibility = async (description: string, licenseType
   `;
 
   try {
+    const ai = getAIClient();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
@@ -62,6 +73,7 @@ const fileToBase64 = (file: File): Promise<string> => {
 
 export const validateDocumentContent = async (file: File, docId: string): Promise<any> => {
   try {
+    const ai = getAIClient();
     const base64Data = await fileToBase64(file);
     const rules = DOCUMENT_SPECIFIC_RULES[docId];
     
@@ -135,7 +147,7 @@ export const validateDocumentContent = async (file: File, docId: string): Promis
     return { 
       isConsistent: false, 
       extractedData: { 
-        observacion_tecnica: "Error de lectura IA. Verifique que el archivo sea legible y no tenga protección por contraseña." 
+        observacion_tecnica: error instanceof Error ? error.message : "Error de lectura IA. Verifique que el archivo sea legible." 
       } 
     };
   }
