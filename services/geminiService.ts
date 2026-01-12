@@ -2,15 +2,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { SYSTEM_INSTRUCTION_POT_REVIEWER, DOCUMENT_SPECIFIC_RULES } from '../constants.ts';
 
-/**
- * Función para inicializar la IA justo antes de usarla.
- * Esto previene el error "API key is missing" al asegurar que process.env.API_KEY sea leído en tiempo de ejecución.
- */
-const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
-
 export const consultRegulatoryChat = async (message: string, history: string[] = []): Promise<string> => {
   try {
-    const ai = getAI();
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: message,
@@ -23,9 +17,10 @@ export const consultRegulatoryChat = async (message: string, history: string[] =
     return response.text || "No se pudo generar una respuesta.";
   } catch (error) {
     console.error("Error consultando Gemini:", error);
-    return "Error: " + (error instanceof Error && error.message.includes("key") 
-      ? "API_KEY no detectada. Verifique la configuración en Vercel y realice un Redeploy." 
-      : "Fallo en la conexión con el motor de IA.");
+    if (error instanceof Error && error.message.includes("key")) {
+        return "⚠️ **Error de Configuración**: La llave de IA (API_KEY) no ha sido detectada por el navegador. \n\n**Acciones requeridas:**\n1. Verifique que la variable `API_KEY` esté en los ajustes de Vercel.\n2. **IMPORTANTE**: Realice un 'Redeploy' desde el panel de Vercel para aplicar los cambios.";
+    }
+    return "Fallo en la conexión con el motor de IA.";
   }
 };
 
@@ -42,7 +37,7 @@ export const analyzeProjectFeasibility = async (description: string, licenseType
   `;
 
   try {
-    const ai = getAI();
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
@@ -50,7 +45,7 @@ export const analyzeProjectFeasibility = async (description: string, licenseType
     return response.text || "Error en análisis.";
   } catch (error) {
     console.error("Error en análisis de viabilidad:", error);
-    return "Error en el análisis de viabilidad.";
+    return "Error en el análisis de viabilidad técnica.";
   }
 };
 
@@ -69,7 +64,7 @@ const fileToBase64 = (file: File): Promise<string> => {
 
 export const validateDocumentContent = async (file: File, docId: string): Promise<any> => {
   try {
-    const ai = getAI();
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const base64Data = await fileToBase64(file);
     const rules = DOCUMENT_SPECIFIC_RULES[docId];
     
@@ -146,8 +141,8 @@ export const validateDocumentContent = async (file: File, docId: string): Promis
       isConsistent: false, 
       extractedData: { 
         observacion_tecnica: error instanceof Error && error.message.includes("key")
-          ? "API_KEY faltante. Redespliegue la aplicación en Vercel tras configurar la variable de entorno."
-          : "No se pudo procesar el documento. Verifique legibilidad y formato."
+          ? "ERROR CRÍTICO: Llave de API no detectada en el entorno de ejecución."
+          : "No se pudo procesar el documento. Intente de nuevo o verifique el formato."
       } 
     };
   }
