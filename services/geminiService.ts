@@ -159,7 +159,17 @@ export const validateDocumentContent = async (file: File, docId: string): Promis
     });
 
     return JSON.parse(response.text);
-  } catch (error) {
-    return { isConsistent: false, extractedData: { observacion_tecnica: "Error en validación AI." } };
+  } catch (error: any) {
+    console.error("CRITICAL: validateDocumentContent failed", error);
+    const isApiKeyError = error.message === "API_KEY_NOT_FOUND" || error.status === 403 || error.status === 401;
+    
+    return { 
+      isConsistent: false, 
+      extractedData: { 
+        observacion_tecnica: isApiKeyError 
+          ? "⚠️ ERROR: API_KEY no configurada o inválida. Verifica tu entorno." 
+          : `Error técnico en validación AI: ${error.message || "Consulta la consola"}` 
+      } 
+    };
   }
 };
