@@ -137,15 +137,15 @@ const App: React.FC = () => {
              <div>
                <h3 className="text-white text-lg font-bold mb-4">Enlaces de Interés</h3>
                <ul className="space-y-2 text-sm">
-                 <li><a href="#" className="hover:text-white transition">Secretaría de Planeación</a></li>
-                 <li><a href="#" className="hover:text-white transition">Ministerio de Vivienda</a></li>
-                 <li><a href="#" className="hover:text-white transition">Consulta de Norma Urbana</a></li>
+                 <li><a href="https://www.sdp.gov.co/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">Secretaría de Planeación</a></li>
+                 <li><a href="https://minvivienda.gov.co/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">Ministerio de Vivienda</a></li>
+                 <li><a href="https://sinupot.sdp.gov.co/sinupot/index.jsf" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">Consulta de Norma Urbana</a></li>
                </ul>
              </div>
              <div>
                <h3 className="text-white text-lg font-bold mb-4">Contacto</h3>
                <p className="text-sm">Bogotá D.C., Colombia</p>
-               <p className="text-sm">info@curaduriadigital.gov.co</p>
+               <p className="text-sm font-medium">info@curaduriadigital.gov.co</p>
              </div>
           </div>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-8 border-t border-slate-700 text-center text-xs">
