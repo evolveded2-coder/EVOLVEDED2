@@ -7,12 +7,8 @@
     <title>Curaduría Digital Bogotá</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      // Definición segura de process.env para el navegador
-      if (typeof window.process === 'undefined') {
-        window.process = { env: {} };
-      } else if (typeof window.process.env === 'undefined') {
-        window.process.env = {};
-      }
+      // Aseguramos que process.env exista sin sobreescribir lo que inyecte el entorno
+      window.process = window.process || { env: {} };
       
       tailwind.config = {
         theme: {

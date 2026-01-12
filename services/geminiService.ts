@@ -2,11 +2,15 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { SYSTEM_INSTRUCTION_POT_REVIEWER, DOCUMENT_SPECIFIC_RULES } from '../constants.ts';
 
-// Inicialización global según lineamientos oficiales
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
+/**
+ * Función para inicializar la IA justo antes de usarla.
+ * Esto previene el error "API key is missing" al asegurar que process.env.API_KEY sea leído en tiempo de ejecución.
+ */
+const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
 
 export const consultRegulatoryChat = async (message: string, history: string[] = []): Promise<string> => {
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: message,
@@ -19,7 +23,9 @@ export const consultRegulatoryChat = async (message: string, history: string[] =
     return response.text || "No se pudo generar una respuesta.";
   } catch (error) {
     console.error("Error consultando Gemini:", error);
-    return "Error en la conexión con el motor de IA. Verifique su conexión y configuración.";
+    return "Error: " + (error instanceof Error && error.message.includes("key") 
+      ? "API_KEY no detectada. Verifique la configuración en Vercel y realice un Redeploy." 
+      : "Fallo en la conexión con el motor de IA.");
   }
 };
 
@@ -36,6 +42,7 @@ export const analyzeProjectFeasibility = async (description: string, licenseType
   `;
 
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
@@ -62,6 +69,7 @@ const fileToBase64 = (file: File): Promise<string> => {
 
 export const validateDocumentContent = async (file: File, docId: string): Promise<any> => {
   try {
+    const ai = getAI();
     const base64Data = await fileToBase64(file);
     const rules = DOCUMENT_SPECIFIC_RULES[docId];
     
@@ -90,22 +98,24 @@ export const validateDocumentContent = async (file: File, docId: string): Promis
         });
     }
 
-    const prompt = `
+    const promptText = `
       ${specificInstructions}
       Responde EXCLUSIVAMENTE con un objeto JSON.
     `;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: [
-        { 
-          inlineData: { 
-            mimeType: file.type.includes('pdf') ? 'application/pdf' : file.type, 
-            data: base64Data 
-          } 
-        },
-        { text: prompt }
-      ],
+      contents: {
+        parts: [
+          { 
+            inlineData: { 
+              mimeType: file.type.includes('pdf') ? 'application/pdf' : file.type, 
+              data: base64Data 
+            } 
+          },
+          { text: promptText }
+        ]
+      },
       config: {
         systemInstruction: systemRole,
         responseMimeType: "application/json",
@@ -131,11 +141,13 @@ export const validateDocumentContent = async (file: File, docId: string): Promis
     return JSON.parse(text);
 
   } catch (error) {
-    console.error("Fallo en validación Real AI:", error);
+    console.error("Fallo en validación Real IA:", error);
     return { 
       isConsistent: false, 
       extractedData: { 
-        observacion_tecnica: "No se pudo procesar el documento. Verifique que la API_KEY esté correctamente configurada en Vercel y que el archivo sea un PDF o Imagen legible." 
+        observacion_tecnica: error instanceof Error && error.message.includes("key")
+          ? "API_KEY faltante. Redespliegue la aplicación en Vercel tras configurar la variable de entorno."
+          : "No se pudo procesar el documento. Verifique legibilidad y formato."
       } 
     };
   }
