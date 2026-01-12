@@ -3,13 +3,18 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { SYSTEM_INSTRUCTION_POT_REVIEWER, DOCUMENT_SPECIFIC_RULES } from '../constants.ts';
 
 /**
- * Centralized AI instance getter.
+ * Obtiene la instancia de la IA verificando la presencia de la clave de API.
  */
 const getAIInstance = () => {
   const apiKey = process.env.API_KEY;
+  
+  // Verificación exhaustiva de la variable de entorno
   if (!apiKey || apiKey === "undefined" || apiKey === "" || apiKey === "null") {
+    console.error("❌ ERROR DE CONFIGURACIÓN: La variable de entorno 'API_KEY' no está definida.");
+    console.info("💡 SOLUCIÓN: Debes configurar la variable API_KEY en tu panel de control de Vercel o en tu archivo .env");
     throw new Error("API_KEY_NOT_FOUND");
   }
+  
   return new GoogleGenAI({ apiKey });
 };
 
@@ -45,9 +50,9 @@ export const consultRegulatoryChat = async (message: string): Promise<ChatRespon
   } catch (error: any) {
     console.error("Error en consultRegulatoryChat:", error);
     if (error.message === "API_KEY_NOT_FOUND") {
-      return { text: "⚠️ **CONFIGURACIÓN PENDIENTE**: La API_KEY no está configurada o requiere Redeploy en Vercel." };
+      return { text: "⚠️ **CONFIGURACIÓN REQUERIDA**: No se detectó la clave de API (API_KEY). Por favor, asegúrate de haberla configurado en las variables de entorno de tu proyecto y realiza un redeploy." };
     }
-    return { text: "El motor de IA está ocupado. Intente de nuevo." };
+    return { text: "El motor de IA está ocupado o la clave es inválida. Intente de nuevo." };
   }
 };
 
@@ -167,8 +172,8 @@ export const validateDocumentContent = async (file: File, docId: string): Promis
       isConsistent: false, 
       extractedData: { 
         observacion_tecnica: isApiKeyError 
-          ? "⚠️ ERROR: API_KEY no configurada o inválida. Verifica tu entorno." 
-          : `Error técnico en validación AI: ${error.message || "Consulta la consola"}` 
+          ? "⚠️ ERROR DE CONFIGURACIÓN: No se encuentra la 'API_KEY' en el servidor. El administrador debe configurarla para habilitar la IA." 
+          : `Error en el servicio de IA: ${error.message || "Fallo de conexión"}` 
       } 
     };
   }
