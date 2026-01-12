@@ -2,21 +2,11 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { SYSTEM_INSTRUCTION_POT_REVIEWER, DOCUMENT_SPECIFIC_RULES } from '../constants.ts';
 
-/**
- * Función auxiliar para obtener el cliente de IA de forma segura.
- * Garantiza que process.env.API_KEY sea leído en el momento del uso.
- */
-const getAIClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("API_KEY no configurada. Por favor, añádala en las variables de entorno de Vercel.");
-  }
-  return new GoogleGenAI({ apiKey });
-};
+// Inicialización global según lineamientos oficiales
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
 
 export const consultRegulatoryChat = async (message: string, history: string[] = []): Promise<string> => {
   try {
-    const ai = getAIClient();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: message,
@@ -29,7 +19,7 @@ export const consultRegulatoryChat = async (message: string, history: string[] =
     return response.text || "No se pudo generar una respuesta.";
   } catch (error) {
     console.error("Error consultando Gemini:", error);
-    return "Error: " + (error instanceof Error ? error.message : "Fallo en la conexión con el servidor de IA.");
+    return "Error en la conexión con el motor de IA. Verifique su conexión y configuración.";
   }
 };
 
@@ -46,7 +36,6 @@ export const analyzeProjectFeasibility = async (description: string, licenseType
   `;
 
   try {
-    const ai = getAIClient();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
@@ -73,7 +62,6 @@ const fileToBase64 = (file: File): Promise<string> => {
 
 export const validateDocumentContent = async (file: File, docId: string): Promise<any> => {
   try {
-    const ai = getAIClient();
     const base64Data = await fileToBase64(file);
     const rules = DOCUMENT_SPECIFIC_RULES[docId];
     
@@ -147,7 +135,7 @@ export const validateDocumentContent = async (file: File, docId: string): Promis
     return { 
       isConsistent: false, 
       extractedData: { 
-        observacion_tecnica: error instanceof Error ? error.message : "Error de lectura IA. Verifique que el archivo sea legible." 
+        observacion_tecnica: "No se pudo procesar el documento. Verifique que la API_KEY esté correctamente configurada en Vercel y que el archivo sea un PDF o Imagen legible." 
       } 
     };
   }
